@@ -1,0 +1,31 @@
+<!DOCTYPE hmtl>
+<html>
+  <head>
+    <title>Oil & Gas Reserves</title>
+  </head>
+  <body>
+    <div class="container">
+      <form>
+        <div class="field">
+          <label for="txt-proved">
+            Proved
+            <abbr title="required">*</abbr>
+          </label>
+          <input id="txt-proved" type="number">
+          <div class="radio-button-group">
+            <label for="rb-proved-reported">
+              <input id="rb-proved-reported" type="radio" name="proved">
+              Reported
+            </label>
+            <label for="rb-proved-modeled">
+              <input id="rb-proved-modeled" type="radio" name="proved">
+              Modeled
+            </label>
+          </div>
+        </div>
+      </form>
+    </div>
+    <script type="text/typescript" src="app.ts"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/typescript/2.9.2/typescript.min.js" integrity="sha256-Vnj1puSiNpdYNSNqWMuOFPU6NSiZ13hUr/44eBUOSII=" crossorigin="anonymous"></script>
+  </body>
+</html>
