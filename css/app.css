@@ -1,0 +1,72 @@
+* {
+  margin: 0;
+  outline: none;
+  padding: 0;
+}
+
+html,
+body,
+input {
+  font: normal 14px/1.8 'Roboto', 'Helvetica Neue', 'Arial', sans-serif;
+}
+
+#app {
+  margin: 0 auto;
+  padding: 0 10px;
+  width: 940px;
+}
+
+.button-container {
+  margin: 10px 0;
+}
+
+button {
+  background: #eee;
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.field {
+  border-bottom: 1px solid #ccc;
+  padding: 10px;
+}
+
+.field input[type=number],
+.field .radio-button-group {
+  display: inline-block;
+  margin-right: 10px;
+  vertical-align: top;
+}
+
+label {
+  font-weight: 600;
+}
+
+input[type=number] {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 5px 10px;
+  width: 100px;
+}
+
+.radio-button-group {
+  list-style: none;
+  width: 150px;
+}
+
+.radio-button-group label {
+  font-weight: 400;
+}
+
+input[type=radio]:checked + span {
+  color: green;
+  font-weight: 600;
+}
+
+.error {
+  color: red;
+  font-weight: 600;
+}
