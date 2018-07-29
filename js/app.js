@@ -388,7 +388,7 @@ class App {
    */
   getSummary() {
     return this.fields.map((field) => {
-      return `${field.name}: ${field.barrels} barrels, ${field.type ? field.type : '-'}`;
+      return `${field.name}: ${field.barrels} barrels, ${field.fieldType ? field.fieldType : '-'}`;
     }).join('\n');
   }
 }
