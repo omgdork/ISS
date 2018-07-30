@@ -35,6 +35,8 @@ interface IField {
 
 interface ISummaryField extends IField {
   validationRules: ISummaryValidationRules;
+  calculate: Function;
+  setValue: Function;
 }
 
 class ValidationRules implements IValidationRules {
@@ -70,7 +72,10 @@ class Field implements IField {
     this.init();
   }
 
-  init() {
+  /**
+   * Initializes the field.
+   */
+  init(): void {
     const range: Range = document.createRange();
     const hyphenatedName: string = this.getHyphenatedName();
     const template: string = `
@@ -233,11 +238,12 @@ class SummaryField extends Field implements ISummaryField {
    * Add textbox error handlers.
    * @param {string} value - The value of the textbox.
    */
-  setUpTextboxErrorHandlers(value) {
+  setUpTextboxErrorHandlers(value): void {
     super.setUpTextboxErrorHandlers(value);
 
     let total: number = 0;
     let isCalculated: boolean = true;
+    let rbSelectedType: HTMLInputElement = this.element.querySelector(`input[name=${this.getHyphenatedName()}-type]:checked`);
 
     this.validationRules.isEqualToSumOf.forEach((addend: IField | ISummaryField) => {
       if (addend.value === '') {
@@ -256,39 +262,20 @@ class SummaryField extends Field implements ISummaryField {
       this.errors.push(`${this.name} must be greater than or equal to 
         ${this.validationRules.isEqualToSumOf.filter((addend: IField | ISummaryField) => addend.value !== '').map((addend: IField | ISummaryField) => addend.name).join(',')}.`);
     }
+
+    if (rbSelectedType !== null) {
+      this.handleFieldTypeError(<FieldType>rbSelectedType.value);
+    }
   }
 
   /**
    * Adds change listeners to the field type radio buttons.
    */
-  setUpFieldTypeErrorHandlers() {
+  setUpFieldTypeErrorHandlers(): void {
     this.element.querySelectorAll('input[type="radio"]').forEach((radio) => {
       radio.addEventListener('change', (e) => {
         const target: HTMLInputElement = <HTMLInputElement>e.target;
-        const sumOf: Array<IField | ISummaryField> = this.validationRules.isEqualToSumOf;
-        const typeShouldBe: string = sumOf.some((addend: IField | ISummaryField) => addend.fieldType === FieldType.Modeled) ? FieldType.Modeled : FieldType.Reported;
-        const modeledError = `${this.name} must be of type "Modeled" when at least one of ${sumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')} is "Modeled".`;
-        const reportedError = `${this.name} must be of type "Reported" when ${sumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')} are "Reported".`;
-
-        // Clear the modeled/reported errors first.
-        const modeledErrorIndex: number = this.errors.indexOf(modeledError);
-        const reportedErrorIndex: number = this.errors.indexOf(reportedError);
-
-        if (modeledErrorIndex >= 0) {
-          this.errors.splice(modeledErrorIndex, 1);
-        }
-
-        if (reportedErrorIndex >= 0) {
-          this.errors.splice(reportedErrorIndex, 1);
-        }
-
-        // Validate.
-        if (typeShouldBe !== target.value) {
-          const error: string = target.value === FieldType.Reported ? modeledError : reportedError;
-
-          this.errors.push(error);
-        }
-
+        this.handleFieldTypeError(<FieldType>target.value);
         this.showErrors();
       });
     });
@@ -298,7 +285,7 @@ class SummaryField extends Field implements ISummaryField {
    * Calculates the value of the summary field only if all addend fields have values
    * and sets its type (Reported if all addend fields are reported).
    */
-  calculate() {
+  calculate(): void {
     let value: number = 0;
     let fieldType: FieldType = FieldType.Reported;
     let shouldCalculate: boolean = true;
@@ -330,7 +317,7 @@ class SummaryField extends Field implements ISummaryField {
    * @param {number} value - The value.
    * @param {string} fieldType - The field type.
    */
-  setValue(value, fieldType) {
+  setValue(value, fieldType): void {
     const hyphenatedName: string = this.getHyphenatedName();
     const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
     const rb: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-${fieldType}`);
@@ -340,6 +327,36 @@ class SummaryField extends Field implements ISummaryField {
     this.fieldType = fieldType;
     this.clearErrors();
     this.updateBarrelsField();
+  }
+
+  /**
+   * Checks the selected field type for errors.
+   * @param {FieldType} fieldType - The selected field type.
+   */
+  private handleFieldTypeError(fieldType: FieldType): void {
+    const sumOf: Array<IField | ISummaryField> = this.validationRules.isEqualToSumOf;
+    const typeShouldBe: string = sumOf.some((addend: IField | ISummaryField) => addend.fieldType === FieldType.Modeled) ? FieldType.Modeled : FieldType.Reported;
+    const modeledError = `${this.name} must be of type "Modeled" when at least one of ${sumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')} is "Modeled".`;
+    const reportedError = `${this.name} must be of type "Reported" when ${sumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')} are "Reported".`;
+
+    // Clear the modeled/reported errors first.
+    const modeledErrorIndex: number = this.errors.indexOf(modeledError);
+    const reportedErrorIndex: number = this.errors.indexOf(reportedError);
+
+    if (modeledErrorIndex >= 0) {
+      this.errors.splice(modeledErrorIndex, 1);
+    }
+
+    if (reportedErrorIndex >= 0) {
+      this.errors.splice(reportedErrorIndex, 1);
+    }
+
+    // Validate.
+    if (typeShouldBe !== fieldType) {
+      const error: string = fieldType === FieldType.Reported ? modeledError : reportedError;
+
+      this.errors.push(error);
+    }
   }
 }
 
@@ -356,7 +373,7 @@ class App {
   /**
    * Initialize the app component.
    */
-  init() {
+  init(): void {
     const range = document.createRange();
     const template = `
       <form>
@@ -411,7 +428,7 @@ class App {
   /**
    * Submits the form.
    */
-  submit() {
+  submit(): void {
     const hasErrors = this.fields.some((field) => field.errors.length > 0);
 
     if (hasErrors) {
@@ -425,7 +442,7 @@ class App {
   /**
    * Clears the form.
    */
-  clear() {
+  clear(): void {
     this.fields.forEach((field) => field.clear());
   }
 
@@ -433,7 +450,7 @@ class App {
    * Get the summary.
    * @returns {string} - The summary.
    */
-  getSummary() {
+  getSummary(): string {
     return this.fields.map((field) => {
       return `${field.name}: ${field.barrels} barrels, ${field.fieldType ? field.fieldType : '-'}`;
     }).join('\n');
