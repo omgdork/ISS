@@ -17,11 +17,31 @@ interface ISummaryValidationRules extends IValidationRules {
   isEqualToSumOf: Array<IField | ISummaryField>;
 }
 
+interface IField {
+  name: string;
+  fieldType: FieldType;
+  unit: Unit;
+  value: string;
+  barrels: number;
+  validationRules: IValidationRules;
+  errors: Array<string>;
+  showErrors: Function;
+  clearErrors: Function;
+  clear: Function;
+  getHyphenatedName: Function;
+  updateBarrelsField: Function;
+  element: HTMLElement;
+}
+
+interface ISummaryField extends IField {
+  validationRules: ISummaryValidationRules;
+}
+
 class ValidationRules implements IValidationRules {
   isRequired: boolean;
   isNotNegative: boolean;
 
-  constructor(isRequired: boolean = false, isNotNegative: boolean = true) {
+  constructor(isRequired: boolean, isNotNegative: boolean) {
     this.isRequired = isRequired;
     this.isNotNegative = isNotNegative;
   }
@@ -30,37 +50,19 @@ class ValidationRules implements IValidationRules {
 class SummaryValidationRules extends ValidationRules implements ISummaryValidationRules {
   isEqualToSumOf: Array<IField | ISummaryField>;
 
-  constructor(isRequired: boolean = false, isNotNegative: boolean = true, isEqualToSumOf: Array<IField> = []) {
+  constructor(isRequired: boolean, isNotNegative: boolean, isEqualToSumOf: Array<IField | ISummaryField>) {
     super(isRequired, isNotNegative);
     this.isEqualToSumOf = isEqualToSumOf;
   }
 }
 
-interface IField {
-  name: string;
-  value: number;
-  unit: Unit;
-  type: FieldType;
-  barrels: number;
-  validationRules: IValidationRules;
-  errors: Array<string>;
-  showErrors: Function;
-  clearErrors: Function;
-  element: HTMLDivElement;
-}
-
-interface ISummaryField extends IField {
-  validationRules: ISummaryValidationRules;
-  calculate: Function;
-  setValue: Function;
-}
-
 class Field implements IField {
   name: string;
+  fieldType: FieldType = null;
+  unit: Unit = Unit.Barrel;
   validationRules: IValidationRules;
-  errors: Array<string>;
+  errors: Array<string> = [];
   element: HTMLDivElement;
-  txtbox: HTMLInputElement;
 
   constructor(name: string, validationRules: IValidationRules) {
     this.name = name;
@@ -68,100 +70,17 @@ class Field implements IField {
     this.init();
   }
 
-  /**
-   * Shows the errors.
-   */
-  showErrors(): void {
-    this.element.querySelector('.error').innerHTML = this.errors.join('<br>');
-  }
-
-  /**
-   * Clears the errors.
-   */
-  clearErrors(): void {
-    this.errors = [];
-    this.element.querySelector('.error').innerHTML = '';
-  }
-
-  /**
-   * Gets the value based on the input.
-   */
-  get value(): number {
-    const hyphenatedName: string = this.getHyphenatedName();
-    const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
-
-    return Number(txtbox.value);
-  }
-
-  /**
-   * Gets the unit based on the selected radio button.
-   */
-  get unit(): Unit {
-    const hyphenatedName: string = this.getHyphenatedName();
-    const rb: HTMLInputElement = <HTMLInputElement>document.querySelector(`input[name="${hyphenatedName}-unit"]:checked`);
-
-    return rb ? <Unit>rb.value : null;
-  }
-
-  /**
-   * Gets the field type based on the selected radio button.
-   */
-  get type(): FieldType {
-    const hyphenatedName: string = this.getHyphenatedName();
-    const rb: HTMLInputElement = <HTMLInputElement>document.querySelector(`input[name="${hyphenatedName}-type"]:checked`);
-
-    return rb ? <FieldType>rb.value : null;
-  }
-
-  /**
-   * Selects the radio button with the corresponding field type.
-   * @param {FieldType} fieldType - The type of field.
-   */
-  set type(fieldType: FieldType) {
-    const hyphenatedName: string = this.getHyphenatedName();
-    const rb: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-${fieldType}`);
-
-    rb.checked = true;
-  }
-
-  /**
-   * Gets the value in barrels.
-   * @returns {number} The value in barrels.
-   */
-  get barrels(): number {
-    return this.unit === Unit.Barrel ? this.value : this.value * 7.33;
-  }
-
-  /**
-   * Initializes the field component.
-   */
-  private init(): void {
-    this.element = document.createElement('div');
-    this.element.classList.add('field');
-
+  init() {
     const range: Range = document.createRange();
-    const hyphenatedName = this.getHyphenatedName();
+    const hyphenatedName: string = this.getHyphenatedName();
     const template: string = `
       <label for="txt-${hyphenatedName}">
         ${this.name}
         ${this.validationRules.isRequired ? '<abbr title="required">*</abbr>' : ''}
       </label>
+      <span class="barrels"></span>
       <div>
         <input id="txt-${hyphenatedName}" type="number" min="0">
-        <ul class="radio-button-group">
-          <li>
-            <label for="rb-${hyphenatedName}-unit-barrel">
-              <input id="rb-${hyphenatedName}-unit-barrel" type="radio" name="${hyphenatedName}-unit" value="barrel">
-              <span>Barrels</span>
-            </label>
-          </li>
-          <li>
-            <label for="rb-${hyphenatedName}-unit-metric-ton">
-              <input id="rb-${hyphenatedName}-unit-metric-ton" type="radio" name="${hyphenatedName}-unit" value="metric ton">
-              <span>Metric Tons</span>
-            </label>
-          </li>
-        </ul>
         <ul class="radio-button-group">
           <li>
             <label for="rb-${hyphenatedName}-type-reported">
@@ -180,7 +99,36 @@ class Field implements IField {
       <p class="error"></p>
     `;
     const frag: DocumentFragment = range.createContextualFragment(template);
+    const txtbox: HTMLInputElement = frag.querySelector('input[type=number]');
+    const radios: NodeListOf<HTMLInputElement> = frag.querySelectorAll(`input[type=radio]`);
 
+    txtbox.addEventListener('input', (e: Event) => {
+      const value: string = (<HTMLInputElement>e.target).value;
+      this.clearErrors();
+      this.setUpTextboxErrorHandlers(value);
+      this.updateBarrelsField();
+      this.showErrors();
+    });
+
+    radios.forEach((radio: HTMLInputElement) => {
+      radio.addEventListener('change', (e: Event) => {
+        this.fieldType = <FieldType>(<HTMLInputElement>e.target).value;
+
+        const errorIndex = this.errors.indexOf(`${this.name} must have a type (Reported or Modeled).`);
+        
+        if (errorIndex >= 0) {
+          this.errors.splice(errorIndex, 1);
+          this.showErrors();
+        }
+      });
+    });
+
+    if (this.validationRules.isRequired) {
+      this.errors.push(`${this.name} is required.`);
+    }
+
+    this.element = document.createElement('div');
+    this.element.classList.add('field');
     this.element.appendChild(frag);
   }
 
@@ -188,213 +136,321 @@ class Field implements IField {
    * Gets the hyphenated name of the field.
    * @returns {string} The hyphenated name.
    */
-  getHyphenatedName(): string {
+  getHyphenatedName() {
     return this.name.replace(/,/g, '').split(' ').join('-').toLowerCase();
+  }
+
+  /**
+   * Clears the errors.
+   */
+  clearErrors() {
+    this.errors = [];
+    this.element.querySelector('.error').innerHTML = '';
+  }
+
+  /**
+   * Shows the errors.
+   */
+  showErrors() {
+    this.element.querySelector('.error').innerHTML = this.errors.join('<br>');
+  }
+
+  /**
+   * Sets up the textbox error handlers.
+   * @param {string} value - The value of the textbox.
+   */
+  setUpTextboxErrorHandlers(value) {
+    if (this.validationRules.isRequired && value === '') {
+      this.errors.push(`${this.name} is required.`);
+    }
+
+    if (this.validationRules.isNotNegative && value < 0) {
+      this.errors.push(`${this.name} cannot be negative.`);
+    }
+
+    if (value !== '' && !this.fieldType) {
+      this.errors.push(`${this.name} must have a type (Reported or Modeled).`);
+    }
+  }
+
+  /**
+   * Updates the barrels field text.
+   */
+  updateBarrelsField() {
+    const valueInBarrels = this.element.querySelector('.barrels');
+
+    valueInBarrels.innerHTML = this.barrels > 0 ? `(${this.barrels} barrels)` : '';
+  }
+
+  /**
+   * Clears the field.
+   */
+  clear() {
+    const hyphenatedName: string = this.getHyphenatedName();
+    const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
+    const rbReported: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-reported`);
+    const rbModeled: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-modeled`);
+
+    txtbox.value = '';
+    rbReported.checked = false;
+    rbModeled.checked = false;
+    this.fieldType = null;
+    this.updateBarrelsField();
+  }
+
+  /**
+   * Gets the value in barrels.
+   * @returns {number} The value in barrels.
+   */
+  get barrels(): number {
+    const value: number = Number(this.value);
+    const valueInBarrels: number = this.unit === Unit.Barrel ? value : value * 7.33;
+
+    return +valueInBarrels.toFixed(1);
+  }
+
+  /**
+   * Gets the value from the textbox.
+   * @returns {string} The value of the textbox.
+   */
+  get value() {
+    const hyphenatedName: string = this.getHyphenatedName();
+    const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
+
+    return txtbox.value;
   }
 }
 
 class SummaryField extends Field implements ISummaryField {
   validationRules: ISummaryValidationRules;
-  
-  constructor(name: string, validationRules: ISummaryValidationRules) {
+
+  constructor(name, validationRules) {
     super(name, validationRules);
+    this.setUpFieldTypeErrorHandlers();
   }
 
   /**
-   * Sets the calculated value of the input.
+   * Add textbox error handlers.
+   * @param {string} value - The value of the textbox.
    */
-  setValue(): void {
-    const hyphenatedName: string = this.getHyphenatedName();
-    const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
-    const valueType: string = this.validationRules.isEqualToSumOf.some((field: IField | ISummaryField) => field.type === FieldType.Modeled) ? 'modeled' : 'reported';
-    const rbUnit: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-unit-barrel`);
-    const rbType: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-${valueType}`);
+  setUpTextboxErrorHandlers(value) {
+    super.setUpTextboxErrorHandlers(value);
 
-    txtbox.value = this.calculate().toString();
-    rbUnit.checked = true;
-    rbType.checked = true;
-  }
+    let total: number = 0;
+    let isCalculated: boolean = true;
 
-  /**
-   * Calculates the value of the field based on its dependencies.
-   * @returns {number} The calculated value in barrels.
-   */
-  calculate(): number {
-    const shouldBe = this.validationRules.isEqualToSumOf.reduce((sum: number, field: IField | ISummaryField) => {
-      let fieldValue = 0;
-
-      if (field.value > 0 && field.unit && field.type) {
-        if (field.type === FieldType.Modeled) {
-          this.type = FieldType.Modeled;
-        }
-
-        fieldValue = field.barrels;
+    this.validationRules.isEqualToSumOf.forEach((addend: IField | ISummaryField) => {
+      if (addend.value === '') {
+        isCalculated = false;
+        return;
       }
 
-      return sum + fieldValue;
-    }, 0);
+      total += Number(addend.value);
+    });
 
-    return shouldBe;
+    if (isCalculated && total !== Number(value)) {
+      this.errors.push(`${this.name} must be equal to the total of ${this.validationRules.isEqualToSumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')}.`);
+    }
+
+    if (!isCalculated && total > Number(value)) {
+      this.errors.push(`${this.name} must be greater than or equal to 
+        ${this.validationRules.isEqualToSumOf.filter((addend: IField | ISummaryField) => addend.value !== '').map((addend: IField | ISummaryField) => addend.name).join(',')}.`);
+    }
+  }
+
+  /**
+   * Adds change listeners to the field type radio buttons.
+   */
+  setUpFieldTypeErrorHandlers() {
+    this.element.querySelectorAll('input[type="radio"]').forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        const target: HTMLInputElement = <HTMLInputElement>e.target;
+        const sumOf: Array<IField | ISummaryField> = this.validationRules.isEqualToSumOf;
+        const typeShouldBe: string = sumOf.some((addend: IField | ISummaryField) => addend.fieldType === FieldType.Modeled) ? FieldType.Modeled : FieldType.Reported;
+        const modeledError = `${this.name} must be of type "Modeled" when at least one of ${sumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')} is "Modeled".`;
+        const reportedError = `${this.name} must be of type "Reported" when ${sumOf.map((addend: IField | ISummaryField) => addend.name).join(', ')} are "Reported".`;
+
+        // Clear the modeled/reported errors first.
+        const modeledErrorIndex: number = this.errors.indexOf(modeledError);
+        const reportedErrorIndex: number = this.errors.indexOf(reportedError);
+
+        if (modeledErrorIndex >= 0) {
+          this.errors.splice(modeledErrorIndex, 1);
+        }
+
+        if (reportedErrorIndex >= 0) {
+          this.errors.splice(reportedErrorIndex, 1);
+        }
+
+        // Validate.
+        if (typeShouldBe !== target.value) {
+          const error: string = target.value === FieldType.Reported ? modeledError : reportedError;
+
+          this.errors.push(error);
+        }
+
+        this.showErrors();
+      });
+    });
+  }
+
+  /**
+   * Calculates the value of the summary field only if all addend fields have values
+   * and sets its type (Reported if all addend fields are reported).
+   */
+  calculate() {
+    let value: number = 0;
+    let fieldType: FieldType = FieldType.Reported;
+    let shouldCalculate: boolean = true;
+
+    this.validationRules.isEqualToSumOf.forEach((field: IField | ISummaryField) => {
+      const textbox: HTMLInputElement = field.element.querySelector('input[type=number]');
+      const checked: HTMLInputElement = field.element.querySelector(`input[name=${field.getHyphenatedName()}-type]:checked`);
+
+      if (textbox.value !== '' && checked) {
+        value += Number(textbox.value);
+
+        if (checked.value === FieldType.Modeled) {
+          fieldType = FieldType.Modeled;
+        }
+      } else {
+        shouldCalculate = false;
+      }
+    });
+
+    if (shouldCalculate) {
+      this.setValue(value, fieldType);
+    } else {
+      this.clear();
+    }
+  }
+
+  /**
+   * Sets the value and type of the field.
+   * @param {number} value - The value.
+   * @param {string} fieldType - The field type.
+   */
+  setValue(value, fieldType) {
+    const hyphenatedName: string = this.getHyphenatedName();
+    const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
+    const rb: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-${fieldType}`);
+
+    txtbox.value = value;
+    rb.checked = true;
+    this.fieldType = fieldType;
+    this.clearErrors();
+    this.updateBarrelsField();
   }
 }
 
 class App {
-  element: HTMLDivElement;
+  element: HTMLElement;
   fields: Array<IField | ISummaryField>;
 
-  constructor(element: HTMLDivElement, fields: Array<IField | ISummaryField>) {
+  constructor(element, fields) {
     this.element = element;
     this.fields = fields;
     this.init();
   }
 
   /**
-   * Submits the form.
-   */
-  submit(): void {
-    let hasErrors: boolean = false;
-
-    this.fields.forEach((field: IField | ISummaryField) => {
-      field.clearErrors();
-
-      const value = field.value;
-      const rules = field.validationRules;
-
-      if (rules.isRequired && value === 0) {
-        field.errors.push(`${field.name} is required.`);
-        hasErrors = true;
-      }
-
-      if (rules.isNotNegative && value < 0) {
-        field.errors.push(`${field.name} cannot be negative.`);
-        hasErrors = true;
-      }
-
-      // Should also have units and type.
-      if (value) {
-        if (!field.unit) {
-          field.errors.push(`${field.name} must have a unit.`);
-          hasErrors = true;
-        }
-
-        if (!field.type) {
-          field.errors.push(`${field.name} must have a type.`);
-          hasErrors = true;
-        }
-      }
-
-      // Summary fields.
-      if ((<ISummaryField>field).validationRules.isEqualToSumOf) {
-        const summaryField: ISummaryField = <ISummaryField>field;
-        const sumOf: Array<IField> = summaryField.validationRules.isEqualToSumOf;
-        
-        if (sumOf.length) {
-          const calculatedType = sumOf.some((fld: IField) => fld.value > 0 && fld.unit && fld.type && fld.type === FieldType.Modeled)
-            ? FieldType.Modeled
-            : FieldType.Reported;
-
-          if (value === 0) {
-            summaryField.setValue();
-          } else if (summaryField.calculate() !== summaryField.barrels) { // Check if the input value is equal to the total barrels of referenced fields.
-            const errorTemplate = `${summaryField.name} must be equal to the sum of ${sumOf.map((fld: IField) => fld.name).join(', ')} in barrels (1 Metric Ton = 7.33 Barrels)`;
-
-            summaryField.errors.push(errorTemplate);
-            hasErrors = true;
-          } else if (summaryField.type !== calculatedType) {
-            const errorTemplate = summaryField.type === FieldType.Modeled
-              ? `${summaryField.name} must be of type "Modeled" when at least one of ${sumOf.map((fld: IField) => fld.name).join(', ')} is "Modeled".`
-              : `${summaryField.name} must be of type "Reported" when ${sumOf.map((fld: IField) => fld.name).join(', ')} are "Reported".`;
-
-            summaryField.errors.push(errorTemplate);
-            hasErrors = true;
-          }
-        }
-      }
-
-      if (field.errors.length) {
-        field.showErrors();
-      }
-    });
-
-    if (hasErrors) {
-      return;
-    }
-
-    // Submit form.
-    alert(this.getSummary());
-  }
-
-  /**
-   * Clears the form.
-   */
-  clear(): void {
-    this.element.querySelectorAll('input[type=number], input[type=radio]').forEach((el: Element) => {
-      const input: HTMLInputElement = <HTMLInputElement>el;
-      switch (input.type) {
-        case 'number':
-          input.value = '';
-          break;
-        case 'radio':
-          input.checked = false;
-          break;
-        default:
-      }
-    });
-    this.fields.forEach((field: IField) => field.clearErrors());
-  }
-
-  /**
    * Initialize the app component.
    */
-  private init(): void {
-    const range: Range = document.createRange();
-    const template: string = `
+  init() {
+    const range = document.createRange();
+    const template = `
       <form>
+        <div class="field">
+          <label for="dd-unit">Unit</label>
+          <select id="dd-unit">
+            <option value="barrel" selected>Barrels</option>
+            <option value="metric ton">Metric Tons</option>
+          </select>
+        </div>
         <div class="button-container">
           <button type="button" class="btn-submit">Submit</button>
           <button type="button" class="btn-clear">Clear</button>
         </div>
       </form>
     `;
-    const frag: DocumentFragment = range.createContextualFragment(template);
-    const form: HTMLFormElement = frag.querySelector('form');
-    const btnSubmit: HTMLButtonElement = frag.querySelector('.btn-submit');
-    const btnClear: HTMLButtonElement = frag.querySelector('.btn-clear');
+    const frag = range.createContextualFragment(template);
+    const form = frag.querySelector('form');
+    const ddUnit = form.querySelector('#dd-unit');
+    const btnSubmit = form.querySelector('.btn-submit');
+    const btnClear = form.querySelector('.btn-clear');
 
-    this.fields.forEach((field: IField | ISummaryField) => form.insertBefore(field.element, form.childNodes[form.childNodes.length - 2]));
-    btnSubmit.addEventListener('click', (e: MouseEvent) => {
-      e.preventDefault();
-      this.submit();
+    ddUnit.addEventListener('change', (e: Event) => {
+      this.fields.forEach((field: IField | ISummaryField) => {
+        field.unit = <Unit>(<HTMLInputElement>e.target).value;
+        field.updateBarrelsField();
+      });
     });
-    btnClear.addEventListener('click', (e: MouseEvent) => {
-      e.preventDefault();
-      this.clear();
+    btnSubmit.addEventListener('click', (e) => this.submit());
+    btnClear.addEventListener('click', (e) => this.clear());
+
+    this.fields.forEach((field) => {
+      field.unit = <Unit>'barrel';
+
+      // Add event listeners to addend fields.
+      if (field instanceof SummaryField) {
+        field.validationRules.isEqualToSumOf.forEach((addend) => {
+          const textbox = addend.element.querySelector('input[type=number]');
+          const radios = addend.element.querySelectorAll(`input[name=${addend.getHyphenatedName()}-type]`);
+
+          textbox.addEventListener('input', (e) => field.calculate());
+          radios.forEach((radio) => radio.addEventListener('change', (e) => field.calculate()));
+        });
+      }
+      
+      form.insertBefore(field.element, form.childNodes[form.childNodes.length - 2]);
     });
+
     this.element.appendChild(frag);
+  }
+
+  /**
+   * Submits the form.
+   */
+  submit() {
+    const hasErrors = this.fields.some((field) => field.errors.length > 0);
+
+    if (hasErrors) {
+      this.fields.forEach((field) => field.showErrors());
+      return;
+    }
+
+    alert(this.getSummary());
+  }
+
+  /**
+   * Clears the form.
+   */
+  clear() {
+    this.fields.forEach((field) => field.clear());
   }
 
   /**
    * Get the summary.
    * @returns {string} - The summary.
    */
-  private getSummary(): string {
-    return this.fields.map((field: IField | ISummaryField) => {
-      return `${field.name}: ${field.barrels} barrels, ${field.type ? field.type : '-'}`;
+  getSummary() {
+    return this.fields.map((field) => {
+      return `${field.name}: ${field.barrels} barrels, ${field.fieldType ? field.fieldType : '-'}`;
     }).join('\n');
   }
 }
 
 (() => {
   const container: HTMLDivElement = <HTMLDivElement>document.getElementById('app');
-  const genericNonNegativeValidationRule = new ValidationRules();
-  const proved = new Field('Proved', new ValidationRules(true, true));
-  const probable = new Field('Probable', genericNonNegativeValidationRule);
-  const provedAndProbable = new SummaryField('Proved and Probable', new SummaryValidationRules(false, true, [proved, probable]));
-  const possible = new Field('Possible', genericNonNegativeValidationRule);
-  const provedProbableAndPossible = new SummaryField('Proved, Probable, and Possible', new SummaryValidationRules(false, true, [proved, probable, possible]));
-  const contingent = new Field('Contingent', genericNonNegativeValidationRule);
-  const prospective = new Field('Prospective', genericNonNegativeValidationRule);
-  const fields: Array<Field | SummaryField> = [
+  const notRequired: ValidationRules = new ValidationRules(false, true);
+  const proved: Field = new Field('Proved', new ValidationRules(true, true));
+  const probable: Field = new Field('Probable', notRequired);
+  const provedAndProbable: SummaryField = new SummaryField('Proved and Probable', new SummaryValidationRules(false, true, [proved, probable]));
+  const possible: Field = new Field('Possible', notRequired);
+  const provedProbableAndPossible: SummaryField = new SummaryField('Proved, Probable, and Possible', new SummaryValidationRules(false, true, [provedAndProbable, possible]));
+  const contingent: Field = new Field('Contingent', notRequired);
+  const prospective: Field = new Field('Prospective', notRequired);
+  const app: App = new App(container, [
     proved,
     probable,
     provedAndProbable,
@@ -402,6 +458,5 @@ class App {
     provedProbableAndPossible,
     contingent,
     prospective,
-  ];
-  const app = new App(container, fields);
+  ]);
 })();
