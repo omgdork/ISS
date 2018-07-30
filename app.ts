@@ -321,9 +321,13 @@ class SummaryField extends Field implements ISummaryField {
     const hyphenatedName: string = this.getHyphenatedName();
     const txtbox: HTMLInputElement = <HTMLInputElement>document.getElementById(`txt-${hyphenatedName}`);
     const rb: HTMLInputElement = <HTMLInputElement>document.getElementById(`rb-${hyphenatedName}-type-${fieldType}`);
+    const inputEvent: Event = new Event('input');
+    const changeEvent: Event = new Event('change');
 
     txtbox.value = value;
+    txtbox.dispatchEvent(inputEvent);
     rb.checked = true;
+    rb.dispatchEvent(changeEvent);
     this.fieldType = fieldType;
     this.clearErrors();
     this.updateBarrelsField();

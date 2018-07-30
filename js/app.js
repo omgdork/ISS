@@ -245,8 +245,12 @@ var SummaryField = /** @class */ (function (_super) {
       var hyphenatedName = this.getHyphenatedName();
       var txtbox = document.getElementById("txt-" + hyphenatedName);
       var rb = document.getElementById("rb-" + hyphenatedName + "-type-" + fieldType);
+      var inputEvent = new Event('input');
+      var changeEvent = new Event('change');
       txtbox.value = value;
+      txtbox.dispatchEvent(inputEvent);
       rb.checked = true;
+      rb.dispatchEvent(changeEvent);
       this.fieldType = fieldType;
       this.clearErrors();
       this.updateBarrelsField();
